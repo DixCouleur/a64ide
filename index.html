@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axe asm debugger</title>
+    <!-- codemirror -->
+    <link rel="stylesheet" href="lib/codemirror/codemirror.css">
+
+    <style>
+        body {
+            background-color: black;
+            background-image: radial-gradient(
+                    rgba(0, 150, 0, 0.75), black 120%
+            );
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            color: white;
+            font: 1.3rem Menlo, Consolas, monospace, sans-serif;
+            text-shadow: 0 0 5px #C8C8C8;
+        }
+
+        body::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: repeating-linear-gradient(
+                    0deg,
+                    rgba(0, 0, 0, 0.15),
+                    rgba(0, 0, 0, 0.15) 1px,
+                    transparent 1px,
+                    transparent 2px
+            );
+            pointer-events: none;
+        }
+
+        .container {
+            width: 95%;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .highlight-line {
+            background-color: rgba(255, 0, 0, 0.6);
+        }
+
+        .btn + .btn {
+            margin-top: 10px;
+        }
+
+        .hide {
+            display: none;
+        }
+
+        .highlight {
+            animation: blink 0.75s ease;
+        }
+
+        @keyframes blink {
+            50% {
+                background-color: rgba(0, 126, 255, 0.7);
+            }
+
+            to {
+                background-color: initial;
+            }
+        }
+
+        .title {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid white;
+            text-align: center;
+            padding: 8px;
+        }
+
+        .module-body {
+            display: flex;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+        .module {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .vm-btns {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .btn {
+            padding: 10px;
+            font: 1rem Menlo, Consolas, monospace, sans-serif;
+            color: white;
+            background: #0055aa;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+<h1 class="title">Axe VM Debugger</h1>
+
+<div class="container">
+
+    <!--编辑器-->
+    <div class="module code">
+        <h3 class="module-title">Editor</h3>
+        <div class="module-body">
+            <textarea id="editor"></textarea>
+        </div>
+    </div>
+
+    <!--寄存器和按钮-->
+    <div class="module">
+        <h3 class="module-title">Registers</h3>
+        <!--寄存器-->
+        <div class="module-body">
+            <table class="table">
+                <thead>
+                <tr>
+                    <th>Register</th>
+                    <th>Value</th>
+                </tr>
+                </thead>
+                <tbody id="register-list">
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 按钮组 -->
+        <div class="vm-btns">
+            <button type="button" class="btn" id="btn-compile">compile&nbsp;(再次点击重置状态)</button>
+            <button type="button" class="btn" id="btn-run" disabled>run</button>
+            <button type="button" class="btn" id="btn-run-step" disabled>runStep</button>
+            <button type="button" class="btn" id="btn-run-point" disabled>runToPoint</button>
+            <!--                <button type="button" class="btn btn-primary" id="btn-run-reset">reset</button>-->
+        </div>
+    </div>
+
+    <!-- 内存 0 ~ 1023 -->
+    <div class="module">
+        <h3 class="module-title">Stack Memory</h3>
+        <div class="module-body" style="height: 500px; overflow-y: scroll;">
+            <table class="table">
+                <thead>
+                <tr>
+                    <th>Address</th>
+                    <th>Value</th>
+                </tr>
+                </thead>
+                <tbody id="stack-memory">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 内存 1024 ~ 65535 -->
+    <!--<div class="col">-->
+    <!--    <h4>Memory</h4>-->
+    <!--    <div style="height: 500px; overflow-y: scroll;">-->
+    <!--        <table class="table table-bordered">-->
+    <!--            <thead>-->
+    <!--            <tr>-->
+    <!--                <th>Address</th>-->
+    <!--                <th>Value</th>-->
+    <!--            </tr>-->
+    <!--            </thead>-->
+    <!--            <tbody id="window-memory">-->
+    <!--            </tbody>-->
+    <!--        </table>-->
+    <!--    </div>-->
+    <!--</div>-->
+
+    <!--显示屏-->
+    <div class="module">
+        <h3 class="module-title">Display</h3>
+        <div class="module-body">
+            <canvas id="canvas-vm" width="300" height="300"></canvas>
+        </div>
+    </div>
+
+
+    <!--暂时禁用 vm log-->
+    <!--    <div class="row">-->
+    <!--        <div class="col-3">-->
+    <!--            <h4>vm log</h4>-->
+    <!--            <textarea id="vm-log" style="width: 100%;height: 500px"></textarea>-->
+    <!--        </div>-->
+    <!--    </div>-->
+</div>
+
+<!-- js -->
+<script src="lib/codemirror/codemirror.js"></script>
+<script src="lib/codemirror/mode/asm/asm.js"></script>
+
+<script src="js/utils.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/config.js"></script>
+
+<script src="js/fonts.js"></script>
+<script src="js/x16asm.js"></script>
+<script src="js/x16vm.js"></script>
+<script src="js/canvas.js"></script>
+
+<script src="js/main.js"></script>
+<!--<script src="../test/test_x16asm.js"></script>-->
+<!--<script src="../test/test_x16vm.js"></script>-->
+
+</body>
+</html>
